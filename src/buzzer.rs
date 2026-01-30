@@ -3,8 +3,8 @@
 //! The Modulino Buzzer module contains a piezo speaker that can play tones
 //! at specified frequencies.
 
+use crate::{addresses, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
-use crate::{addresses, Result};
 
 /// Musical note frequencies in Hz.
 ///
@@ -22,7 +22,7 @@ pub enum Note {
     A3 = 220,
     AS3 = 233,
     B3 = 247,
-    
+
     // Octave 4
     C4 = 262,
     CS4 = 277,
@@ -36,7 +36,7 @@ pub enum Note {
     A4 = 440,
     AS4 = 466,
     B4 = 494,
-    
+
     // Octave 5
     C5 = 523,
     CS5 = 554,
@@ -50,7 +50,7 @@ pub enum Note {
     A5 = 880,
     AS5 = 932,
     B5 = 988,
-    
+
     // Octave 6
     C6 = 1047,
     CS6 = 1109,
@@ -64,7 +64,7 @@ pub enum Note {
     A6 = 1760,
     AS6 = 1865,
     B6 = 1976,
-    
+
     // Octave 7
     C7 = 2093,
     CS7 = 2217,
@@ -78,13 +78,13 @@ pub enum Note {
     A7 = 3520,
     AS7 = 3729,
     B7 = 3951,
-    
+
     // Octave 8
     C8 = 4186,
     CS8 = 4435,
     D8 = 4699,
     DS8 = 4978,
-    
+
     /// Silence (rest)
     Rest = 0,
 }
@@ -121,8 +121,7 @@ impl From<Note> for u16 {
 /// buzzer.no_tone()?;
 /// ```
 pub struct Buzzer<I2C> {
-    i2c: I2C,
-    address: u8,
+    device: I2cDevice<I2C>,
 }
 
 impl<I2C, E> Buzzer<I2C>
@@ -139,17 +138,19 @@ where
 
     /// Create a new Buzzer instance with a custom address.
     pub fn new_with_address(i2c: I2C, address: u8) -> Result<Self, E> {
-        let mut buzzer = Self { i2c, address };
-        
+        let mut buzzer = Self {
+            device: I2cDevice::new(i2c, address),
+        };
+
         // Initialize with no tone
         buzzer.no_tone()?;
-        
+
         Ok(buzzer)
     }
 
     /// Get the I2C address.
     pub fn address(&self) -> u8 {
-        self.address
+        self.device.address
     }
 
     /// Play a tone at the specified frequency.
@@ -165,7 +166,7 @@ where
     pub fn tone(&mut self, frequency: u16, duration_ms: u16) -> Result<(), E> {
         let freq_bytes = (frequency as u32).to_le_bytes();
         let duration_bytes = (duration_ms as u32).to_le_bytes();
-        
+
         let data = [
             freq_bytes[0],
             freq_bytes[1],
@@ -176,8 +177,8 @@ where
             duration_bytes[2],
             duration_bytes[3],
         ];
-        
-        self.i2c.write(self.address, &data)?;
+
+        self.device.write(&data)?;
         Ok(())
     }
 
@@ -199,7 +200,7 @@ where
     /// Stop playing any tone.
     pub fn no_tone(&mut self) -> Result<(), E> {
         let data = [0u8; 8];
-        self.i2c.write(self.address, &data)?;
+        self.device.write(&data)?;
         Ok(())
     }
 
@@ -210,6 +211,6 @@ where
 
     /// Release the I2C bus.
     pub fn release(self) -> I2C {
-        self.i2c
+        self.device.release()
     }
 }

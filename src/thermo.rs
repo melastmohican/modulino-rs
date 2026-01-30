@@ -6,12 +6,12 @@
 //! This module wraps the [`hs3003`](https://crates.io/crates/hs3003) crate
 //! to provide a consistent API with other Modulino devices.
 
-use embedded_hal::i2c::I2c;
 use embedded_hal::delay::DelayNs;
-use hs3003::{Hs3003, Measurement};
+use embedded_hal::i2c::I2c;
 pub use hs3003::Error as Hs3003Error;
+use hs3003::{Hs3003, Measurement};
 
-use crate::{addresses, Result, Error};
+use crate::{addresses, Error, Result};
 
 /// Temperature and humidity measurement.
 ///
@@ -28,13 +28,18 @@ pub struct ThermoMeasurement {
 impl ThermoMeasurement {
     /// Create a new measurement.
     pub const fn new(temperature: f32, humidity: f32) -> Self {
-        Self { temperature, humidity }
+        Self {
+            temperature,
+            humidity,
+        }
     }
 
     /// Check if the measurement is valid.
     pub fn is_valid(&self) -> bool {
-        self.temperature > -40.0 && self.temperature < 125.0 &&
-        self.humidity >= 0.0 && self.humidity <= 100.0
+        self.temperature > -40.0
+            && self.temperature < 125.0
+            && self.humidity >= 0.0
+            && self.humidity <= 100.0
     }
 }
 
@@ -104,7 +109,8 @@ where
         match self.sensor.read(delay) {
             Ok(measurement) => Ok(measurement.into()),
             Err(hs3003::Error::I2c(e)) => Err(Error::I2c(e)),
-            Err(hs3003::Error::StaleData) => Err(Error::DataError),
+            // Err(hs3003::Error::StaleData) => Err(Error::DataError),
+            // _ => Err(Error::DataError), // Fallback for other errors
         }
     }
 

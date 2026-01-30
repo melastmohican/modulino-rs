@@ -2,8 +2,8 @@
 //!
 //! The Modulino Pixels module has 8 RGB LEDs (APA102-compatible).
 
+use crate::{addresses, Color, Error, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
-use crate::{addresses, Color, Error, Result};
 
 /// Number of LEDs on the Modulino Pixels.
 pub const NUM_LEDS: usize = 8;
@@ -31,8 +31,7 @@ pub const NUM_LEDS: usize = 8;
 /// pixels.show()?;
 /// ```
 pub struct Pixels<I2C> {
-    i2c: I2C,
-    address: u8,
+    device: I2cDevice<I2C>,
     data: [u8; NUM_LEDS * 4],
 }
 
@@ -48,20 +47,19 @@ where
     /// Create a new Pixels instance with a custom address.
     pub fn new_with_address(i2c: I2C, address: u8) -> Result<Self, E> {
         let mut pixels = Self {
-            i2c,
-            address,
+            device: I2cDevice::new(i2c, address),
             data: [0xE0; NUM_LEDS * 4], // Initialize with brightness bits set, LEDs off
         };
-        
+
         // Clear all LEDs on init
         pixels.clear_all();
-        
+
         Ok(pixels)
     }
 
     /// Get the I2C address.
     pub fn address(&self) -> u8 {
-        self.address
+        self.device.address
     }
 
     /// Map brightness from 0-100 to 0-31 (5-bit brightness for APA102).
@@ -77,7 +75,12 @@ where
     /// * `index` - LED index (0-7)
     /// * `color` - The color to set
     /// * `brightness` - Brightness level (0-100)
-    pub fn set_color(&mut self, index: usize, color: Color, brightness: u8) -> Result<&mut Self, E> {
+    pub fn set_color(
+        &mut self,
+        index: usize,
+        color: Color,
+        brightness: u8,
+    ) -> Result<&mut Self, E> {
         if index >= NUM_LEDS {
             return Err(Error::OutOfRange);
         }
@@ -85,10 +88,10 @@ where
         let byte_index = index * 4;
         let mapped_brightness = Self::map_brightness(brightness);
         let color_data = color.to_apa102_data() | (mapped_brightness as u32) | 0xE0;
-        
+
         let bytes = color_data.to_le_bytes();
         self.data[byte_index..byte_index + 4].copy_from_slice(&bytes);
-        
+
         Ok(self)
     }
 
@@ -101,7 +104,14 @@ where
     /// * `g` - Green component (0-255)
     /// * `b` - Blue component (0-255)
     /// * `brightness` - Brightness level (0-100)
-    pub fn set_rgb(&mut self, index: usize, r: u8, g: u8, b: u8, brightness: u8) -> Result<&mut Self, E> {
+    pub fn set_rgb(
+        &mut self,
+        index: usize,
+        r: u8,
+        g: u8,
+        b: u8,
+        brightness: u8,
+    ) -> Result<&mut Self, E> {
         self.set_color(index, Color::new(r, g, b), brightness)
     }
 
@@ -119,7 +129,7 @@ where
         let byte_index = index * 4;
         let mapped_brightness = Self::map_brightness(brightness);
         self.data[byte_index] = mapped_brightness | 0xE0;
-        
+
         Ok(self)
     }
 
@@ -144,7 +154,13 @@ where
     /// * `to` - Ending index (inclusive)
     /// * `color` - The color to set
     /// * `brightness` - Brightness level (0-100)
-    pub fn set_range_color(&mut self, from: usize, to: usize, color: Color, brightness: u8) -> &mut Self {
+    pub fn set_range_color(
+        &mut self,
+        from: usize,
+        to: usize,
+        color: Color,
+        brightness: u8,
+    ) -> &mut Self {
         let end = if to >= NUM_LEDS { NUM_LEDS - 1 } else { to };
         for i in from..=end {
             let _ = self.set_color(i, color, brightness);
@@ -176,7 +192,12 @@ where
 
     /// Clear all LEDs.
     pub fn clear_all(&mut self) -> &mut Self {
-        self.data = [0xE0; NUM_LEDS * 4];
+        for i in 0..NUM_LEDS {
+            // Brightness 0 maps to 0 | 0xE0 = 0xE0.
+            // Color Black is 0.
+            // We want [0xE0, 0, 0, 0] in memory (LE).
+            let _ = self.set_color(i, Color::BLACK, 0);
+        }
         self
     }
 
@@ -184,7 +205,7 @@ where
     ///
     /// This must be called after setting colors for changes to take effect.
     pub fn show(&mut self) -> Result<(), E> {
-        self.i2c.write(self.address, &self.data)?;
+        self.device.write(&self.data)?;
         Ok(())
     }
 
@@ -196,6 +217,6 @@ where
 
     /// Release the I2C bus.
     pub fn release(self) -> I2C {
-        self.i2c
+        self.device.release()
     }
 }

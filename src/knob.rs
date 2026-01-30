@@ -2,8 +2,8 @@
 //!
 //! The Modulino Knob module is a rotary encoder with a push button.
 
+use crate::{addresses, Error, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
-use crate::{addresses, Error, Result};
 
 /// Driver for the Modulino Knob module (rotary encoder).
 ///
@@ -28,8 +28,7 @@ use crate::{addresses, Error, Result};
 /// }
 /// ```
 pub struct Knob<I2C> {
-    i2c: I2C,
-    address: u8,
+    device: I2cDevice<I2C>,
     value: i16,
     pressed: bool,
     range: Option<(i16, i16)>,
@@ -47,33 +46,32 @@ where
     /// Create a new Knob instance with a custom address.
     pub fn new_with_address(i2c: I2C, address: u8) -> Result<Self, E> {
         let mut knob = Self {
-            i2c,
-            address,
+            device: I2cDevice::new(i2c, address),
             value: 0,
             pressed: false,
             range: None,
         };
-        
+
         // Read initial state
         knob.update()?;
-        
+
         Ok(knob)
     }
 
     /// Get the I2C address.
     pub fn address(&self) -> u8 {
-        self.address
+        self.device.address
     }
 
     /// Read the current encoder state from the device.
     fn read_data(&mut self) -> Result<(i16, bool), E> {
         let mut buf = [0u8; 4]; // 1 pinstrap + 2 encoder + 1 button
-        self.i2c.read(self.address, &mut buf)?;
-        
+        self.device.read(&mut buf)?;
+
         // Skip first byte (pinstrap address)
         let raw_value = i16::from_le_bytes([buf[1], buf[2]]);
         let pressed = buf[3] != 0;
-        
+
         Ok((raw_value, pressed))
     }
 
@@ -84,9 +82,9 @@ where
     pub fn update(&mut self) -> Result<bool, E> {
         let previous_value = self.value;
         let previous_pressed = self.pressed;
-        
+
         let (mut new_value, new_pressed) = self.read_data()?;
-        
+
         // Apply range constraint if set
         if let Some((min, max)) = self.range {
             if new_value < min {
@@ -97,10 +95,10 @@ where
                 self.set_value_internal(max)?;
             }
         }
-        
+
         self.value = new_value;
         self.pressed = new_pressed;
-        
+
         Ok(self.value != previous_value || self.pressed != previous_pressed)
     }
 
@@ -117,7 +115,7 @@ where
                 return Err(Error::OutOfRange);
             }
         }
-        
+
         self.set_value_internal(value)?;
         self.value = value;
         Ok(())
@@ -127,7 +125,7 @@ where
     fn set_value_internal(&mut self, value: i16) -> Result<(), E> {
         let bytes = value.to_le_bytes();
         let data = [bytes[0], bytes[1], 0, 0];
-        self.i2c.write(self.address, &data)?;
+        self.device.write(&data)?;
         Ok(())
     }
 
@@ -147,7 +145,7 @@ where
     /// Pass `None` to remove the range constraint.
     pub fn set_range(&mut self, min: i16, max: i16) {
         self.range = Some((min, max));
-        
+
         // Constrain current value to new range
         if self.value < min {
             self.value = min;
@@ -175,12 +173,10 @@ where
     pub fn rotation_delta(&self, previous_value: i16) -> i16 {
         // Handle wraparound
         let diff = self.value.wrapping_sub(previous_value);
-        
+
         // Check for wraparound (if diff is too large, it wrapped)
-        if diff > 16384 {
-            diff - 32768
-        } else if diff < -16384 {
-            diff + 32768
+        if !(-16384..=16384).contains(&diff) {
+            diff.wrapping_add(i16::MIN)
         } else {
             diff
         }
@@ -188,6 +184,6 @@ where
 
     /// Release the I2C bus.
     pub fn release(self) -> I2C {
-        self.i2c
+        self.device.release()
     }
 }

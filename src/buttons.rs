@@ -2,8 +2,8 @@
 //!
 //! The Modulino Buttons module has three buttons (A, B, C), each with an associated LED.
 
+use crate::{addresses, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
-use crate::{addresses, Error, Result};
 
 /// Button state representation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -90,8 +90,7 @@ impl ButtonLed {
 /// buttons.update_leds()?;
 /// ```
 pub struct Buttons<I2C> {
-    i2c: I2C,
-    address: u8,
+    device: I2cDevice<I2C>,
     /// LED A state
     pub led_a: ButtonLed,
     /// LED B state
@@ -113,23 +112,22 @@ where
     /// Create a new Buttons instance with a custom address.
     pub fn new_with_address(i2c: I2C, address: u8) -> Result<Self, E> {
         let mut buttons = Self {
-            i2c,
-            address,
+            device: I2cDevice::new(i2c, address),
             led_a: ButtonLed::new(),
             led_b: ButtonLed::new(),
             led_c: ButtonLed::new(),
             current_state: ButtonState::default(),
         };
-        
+
         // Verify device is present
         buttons.read()?;
-        
+
         Ok(buttons)
     }
 
     /// Get the I2C address.
     pub fn address(&self) -> u8 {
-        self.address
+        self.device.address
     }
 
     /// Read the current button states.
@@ -137,15 +135,15 @@ where
     /// Returns a `ButtonState` struct with the pressed state of each button.
     pub fn read(&mut self) -> Result<ButtonState, E> {
         let mut buf = [0u8; 4]; // 1 pinstrap + 3 button states
-        self.i2c.read(self.address, &mut buf)?;
-        
+        self.device.read(&mut buf)?;
+
         // Skip first byte (pinstrap address)
         self.current_state = ButtonState {
             a: buf[1] != 0,
             b: buf[2] != 0,
             c: buf[3] != 0,
         };
-        
+
         Ok(self.current_state)
     }
 
@@ -178,7 +176,7 @@ where
             self.led_b.is_on() as u8,
             self.led_c.is_on() as u8,
         ];
-        self.i2c.write(self.address, &data)?;
+        self.device.write(&data)?;
         Ok(())
     }
 
@@ -202,6 +200,6 @@ where
 
     /// Release the I2C bus.
     pub fn release(self) -> I2C {
-        self.i2c
+        self.device.release()
     }
 }

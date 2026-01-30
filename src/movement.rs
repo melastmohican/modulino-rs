@@ -6,8 +6,8 @@
 //! Note: This driver provides a simplified interface. For full LSM6DSOX
 //! functionality, consider using a dedicated LSM6DSOX driver crate.
 
+use crate::{addresses, Error, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
-use crate::{addresses, Error, Result};
 
 // LSM6DSOX register addresses
 const LSM6DSOX_CTRL1_XL: u8 = 0x10;
@@ -74,8 +74,7 @@ impl From<MovementValues> for (f32, f32, f32) {
 /// println!("Gyro: x={:.2}dps, y={:.2}dps, z={:.2}dps", gyro.x, gyro.y, gyro.z);
 /// ```
 pub struct Movement<I2C> {
-    i2c: I2C,
-    address: u8,
+    device: I2cDevice<I2C>,
     accel_sensitivity: f32,
     gyro_sensitivity: f32,
 }
@@ -94,66 +93,46 @@ where
     /// Valid addresses are 0x6A or 0x6B depending on the SA0 pin configuration.
     pub fn new_with_address(i2c: I2C, address: u8) -> Result<Self, E> {
         let mut movement = Self {
-            i2c,
-            address,
+            device: I2cDevice::new(i2c, address),
             accel_sensitivity: 0.061, // mg/LSB at ±2g
             gyro_sensitivity: 8.75,   // mdps/LSB at ±250dps
         };
-        
+
         // Verify device identity
-        let who_am_i = movement.read_register(LSM6DSOX_WHO_AM_I)?;
+        let who_am_i = movement.device.read_reg(LSM6DSOX_WHO_AM_I)?;
         if who_am_i != LSM6DSOX_WHO_AM_I_VALUE {
             return Err(Error::DeviceNotFound);
         }
-        
+
         // Initialize with default settings
         movement.init()?;
-        
+
         Ok(movement)
     }
 
     /// Get the I2C address.
     pub fn address(&self) -> u8 {
-        self.address
-    }
-
-    /// Write a byte to a register.
-    fn write_register(&mut self, reg: u8, value: u8) -> Result<(), E> {
-        self.i2c.write(self.address, &[reg, value])?;
-        Ok(())
-    }
-
-    /// Read a byte from a register.
-    fn read_register(&mut self, reg: u8) -> Result<u8, E> {
-        let mut buf = [0u8; 1];
-        self.i2c.write_read(self.address, &[reg], &mut buf)?;
-        Ok(buf[0])
-    }
-
-    /// Read multiple bytes from a register.
-    fn read_registers(&mut self, reg: u8, buf: &mut [u8]) -> Result<(), E> {
-        self.i2c.write_read(self.address, &[reg], buf)?;
-        Ok(())
+        self.device.address
     }
 
     /// Initialize the sensor with default settings.
     fn init(&mut self) -> Result<(), E> {
         // Software reset
-        self.write_register(LSM6DSOX_CTRL3_C, 0x01)?;
-        
+        self.device.write_reg(LSM6DSOX_CTRL3_C, 0x01)?;
+
         // Wait for reset (in a real implementation, add delay here)
-        
+
         // Configure accelerometer: 104 Hz, ±2g
-        self.write_register(LSM6DSOX_CTRL1_XL, 0x40)?;
+        self.device.write_reg(LSM6DSOX_CTRL1_XL, 0x40)?;
         self.accel_sensitivity = 0.061; // mg/LSB at ±2g
-        
+
         // Configure gyroscope: 104 Hz, ±250 dps
-        self.write_register(LSM6DSOX_CTRL2_G, 0x40)?;
+        self.device.write_reg(LSM6DSOX_CTRL2_G, 0x40)?;
         self.gyro_sensitivity = 8.75; // mdps/LSB at ±250dps
-        
+
         // Enable BDU (Block Data Update)
-        self.write_register(LSM6DSOX_CTRL3_C, 0x44)?;
-        
+        self.device.write_reg(LSM6DSOX_CTRL3_C, 0x44)?;
+
         Ok(())
     }
 
@@ -162,12 +141,12 @@ where
     /// Returns acceleration in g (gravitational units).
     pub fn acceleration(&mut self) -> Result<MovementValues, E> {
         let mut buf = [0u8; 6];
-        self.read_registers(LSM6DSOX_OUTX_L_A, &mut buf)?;
-        
+        self.device.read_regs(LSM6DSOX_OUTX_L_A, &mut buf)?;
+
         let x_raw = i16::from_le_bytes([buf[0], buf[1]]);
         let y_raw = i16::from_le_bytes([buf[2], buf[3]]);
         let z_raw = i16::from_le_bytes([buf[4], buf[5]]);
-        
+
         // Convert to g
         let scale = self.accel_sensitivity / 1000.0;
         Ok(MovementValues {
@@ -189,12 +168,12 @@ where
     /// Returns angular velocity in degrees per second (dps).
     pub fn angular_velocity(&mut self) -> Result<MovementValues, E> {
         let mut buf = [0u8; 6];
-        self.read_registers(LSM6DSOX_OUTX_L_G, &mut buf)?;
-        
+        self.device.read_regs(LSM6DSOX_OUTX_L_G, &mut buf)?;
+
         let x_raw = i16::from_le_bytes([buf[0], buf[1]]);
         let y_raw = i16::from_le_bytes([buf[2], buf[3]]);
         let z_raw = i16::from_le_bytes([buf[4], buf[5]]);
-        
+
         // Convert to dps
         let scale = self.gyro_sensitivity / 1000.0;
         Ok(MovementValues {
@@ -211,13 +190,13 @@ where
 
     /// Check if new data is available.
     pub fn data_ready(&mut self) -> Result<bool, E> {
-        let status = self.read_register(LSM6DSOX_STATUS_REG)?;
+        let status = self.device.read_reg(LSM6DSOX_STATUS_REG)?;
         // Check XLDA (bit 0) or GDA (bit 1)
         Ok((status & 0x03) != 0)
     }
 
     /// Release the I2C bus.
     pub fn release(self) -> I2C {
-        self.i2c
+        self.device.release()
     }
 }

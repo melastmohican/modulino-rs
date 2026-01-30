@@ -2,11 +2,11 @@
 //!
 //! The Modulino Vibro module contains a vibration motor.
 
+use crate::{addresses, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
-use crate::{addresses, Result};
 
 /// Predefined power levels for the vibration motor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum PowerLevel {
@@ -17,6 +17,7 @@ pub enum PowerLevel {
     /// Moderate vibration
     Moderate = 35,
     /// Medium vibration
+    #[default]
     Medium = 45,
     /// Intense vibration
     Intense = 55,
@@ -30,12 +31,6 @@ impl PowerLevel {
     /// Get the numeric power value.
     pub const fn value(&self) -> u8 {
         *self as u8
-    }
-}
-
-impl Default for PowerLevel {
-    fn default() -> Self {
-        Self::Medium
     }
 }
 
@@ -64,8 +59,7 @@ impl From<PowerLevel> for u8 {
 /// vibro.off()?;
 /// ```
 pub struct Vibro<I2C> {
-    i2c: I2C,
-    address: u8,
+    device: I2cDevice<I2C>,
     frequency: u32,
 }
 
@@ -84,20 +78,19 @@ where
     /// Create a new Vibro instance with a custom address.
     pub fn new_with_address(i2c: I2C, address: u8) -> Result<Self, E> {
         let mut vibro = Self {
-            i2c,
-            address,
+            device: I2cDevice::new(i2c, address),
             frequency: Self::DEFAULT_FREQUENCY,
         };
-        
+
         // Ensure motor is off on init
         vibro.off()?;
-        
+
         Ok(vibro)
     }
 
     /// Get the I2C address.
     pub fn address(&self) -> u8 {
-        self.address
+        self.device.address
     }
 
     /// Get the current frequency setting.
@@ -130,14 +123,23 @@ where
         let freq_bytes = self.frequency.to_le_bytes();
         let duration_bytes = (duration_ms as u32).to_le_bytes();
         let power_bytes = (power as u32).to_le_bytes();
-        
+
         let data = [
-            freq_bytes[0], freq_bytes[1], freq_bytes[2], freq_bytes[3],
-            duration_bytes[0], duration_bytes[1], duration_bytes[2], duration_bytes[3],
-            power_bytes[0], power_bytes[1], power_bytes[2], power_bytes[3],
+            freq_bytes[0],
+            freq_bytes[1],
+            freq_bytes[2],
+            freq_bytes[3],
+            duration_bytes[0],
+            duration_bytes[1],
+            duration_bytes[2],
+            duration_bytes[3],
+            power_bytes[0],
+            power_bytes[1],
+            power_bytes[2],
+            power_bytes[3],
         ];
-        
-        self.i2c.write(self.address, &data)?;
+
+        self.device.write(&data)?;
         Ok(())
     }
 
@@ -149,7 +151,7 @@ where
     /// Turn off the vibration motor.
     pub fn off(&mut self) -> Result<(), E> {
         let data = [0u8; 12];
-        self.i2c.write(self.address, &data)?;
+        self.device.write(&data)?;
         Ok(())
     }
 
@@ -170,6 +172,6 @@ where
 
     /// Release the I2C bus.
     pub fn release(self) -> I2C {
-        self.i2c
+        self.device.release()
     }
 }

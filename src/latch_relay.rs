@@ -3,8 +3,8 @@
 //! The Modulino Latch Relay module is a latching relay that maintains its state
 //! even when power is removed.
 
+use crate::{addresses, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
-use crate::{addresses, Result};
 
 /// Driver for the Modulino Latch Relay module.
 ///
@@ -29,8 +29,7 @@ use crate::{addresses, Result};
 /// relay.off()?;
 /// ```
 pub struct LatchRelay<I2C> {
-    i2c: I2C,
-    address: u8,
+    device: I2cDevice<I2C>,
 }
 
 impl<I2C, E> LatchRelay<I2C>
@@ -44,26 +43,28 @@ where
 
     /// Create a new LatchRelay instance with a custom address.
     pub fn new_with_address(i2c: I2C, address: u8) -> Result<Self, E> {
-        let relay = Self { i2c, address };
+        let relay = Self {
+            device: I2cDevice::new(i2c, address),
+        };
         Ok(relay)
     }
 
     /// Get the I2C address.
     pub fn address(&self) -> u8 {
-        self.address
+        self.device.address
     }
 
     /// Turn the relay on.
     pub fn on(&mut self) -> Result<(), E> {
         let data = [1u8, 0, 0];
-        self.i2c.write(self.address, &data)?;
+        self.device.write(&data)?;
         Ok(())
     }
 
     /// Turn the relay off.
     pub fn off(&mut self) -> Result<(), E> {
         let data = [0u8, 0, 0];
-        self.i2c.write(self.address, &data)?;
+        self.device.write(&data)?;
         Ok(())
     }
 
@@ -92,12 +93,12 @@ where
     /// - `None` if the state is unknown (e.g., after power cycle before first command)
     pub fn is_on(&mut self) -> Result<Option<bool>, E> {
         let mut buf = [0u8; 4]; // 1 pinstrap + 3 status
-        self.i2c.read(self.address, &mut buf)?;
-        
+        self.device.read(&mut buf)?;
+
         // Skip first byte (pinstrap address)
         let status0 = buf[1];
         let status1 = buf[2];
-        
+
         // If both are 0, state is unknown (maintained from before power off)
         if status0 == 0 && status1 == 0 {
             Ok(None)
@@ -110,6 +111,6 @@ where
 
     /// Release the I2C bus.
     pub fn release(self) -> I2C {
-        self.i2c
+        self.device.release()
     }
 }
