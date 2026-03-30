@@ -81,18 +81,12 @@ where
         self.select_page(Self::PAGE_LED_CONTROL)?;
         let mut off = [0u8; 25];
         off[0] = 0x00; // Starting register
-        for i in 1..25 {
-            off[i] = 0x00;
-        }
         self.i2c.write(self.address, &off).map_err(Error::I2c)?;
 
         // Clear PWM registers (zero brightness)
         self.select_page(Self::PAGE_PWM_CONTROL)?;
         let mut pwm = [0u8; 193];
         pwm[0] = 0x00; // Starting register
-        for i in 1..193 {
-            pwm[i] = 0x00;
-        }
         self.i2c.write(self.address, &pwm).map_err(Error::I2c)?;
 
         Ok(())
