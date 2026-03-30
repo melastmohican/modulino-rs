@@ -12,18 +12,21 @@ This crate provides drivers for the Arduino Modulino family of breakout boards, 
 
 ## Supported Modules
 
-| Module | Description | Default Address |
-|--------|-------------|-----------------|
-| `Buttons` | Three buttons with LEDs | 0x3E |
-| `Buzzer` | Piezo speaker | 0x1E |
-| `Pixels` | 8 RGB LEDs (APA102) | 0x36 |
-| `Distance` | ToF sensor (VL53L4CD) | 0x29 |
-| `Movement` | IMU (LSM6DSOX) | 0x6A/0x6B |
-| `Knob` | Rotary encoder with button | 0x3A/0x3B |
-| `Thermo` | Temperature/humidity (HS3003) | 0x44 |
-| `Joystick` | Analog joystick with button | 0x2C |
-| `LatchRelay` | Latching relay | 0x02 |
-| `Vibro` | Vibration motor | 0x38 |
+| Module | Sensor/IC | Implementation | Default Address |
+| :--- | :--- | :--- | :--- |
+| `Buttons` | Custom MCU | **Internal** | 0x3E |
+| `Buzzer` | Custom MCU | **Internal** | 0x1E |
+| `Pixels` | APA102 | **Internal** | 0x36 |
+| `Distance` | VL53L4CD | **Internal** | 0x29 |
+| `Movement` | LSM6DSOX | **Internal** | 0x6A/0x6B |
+| `Knob` | Custom MCU | **Internal** | 0x3A/0x3B |
+| `Thermo` | HS3003 | **External** (`hs3003`) | 0x44 |
+| `Joystick` | Custom MCU | **Internal** | 0x2C |
+| `LatchRelay` | Custom MCU | **Internal** | 0x02 |
+| `Vibro` | Custom MCU | **Internal** | 0x38 |
+| `LedMatrix` | IS31FL3733 | **Internal (Experimental)** | 0x39 |
+| `Pressure` | LPS22HB | **Internal (Experimental)** | 0x5C |
+| `Light` | LTR-381RGB | **Internal (Experimental)** | 0x53 |
 
 ## Usage
 
@@ -202,6 +205,51 @@ let gyro = movement.angular_velocity()?;
 println!("Gyro: x={:.2}°/s, y={:.2}°/s, z={:.2}°/s", gyro.x, gyro.y, gyro.z);
 ```
 
+### Example: LED Matrix
+
+```rust
+use modulino::LedMatrix;
+
+let mut matrix = LedMatrix::new(i2c);
+matrix.init()?;
+
+// Set a pixel (x: 0-15, y: 0-5) to full brightness
+matrix.set_pixel(0, 0, 255)?;
+
+// Update the display
+matrix.show()?;
+```
+
+### Example: Pressure & Temperature
+
+```rust
+use modulino::Pressure;
+
+let mut pressure = Pressure::new(i2c);
+
+// Read atmospheric pressure in hPa
+let hpa = pressure.pressure()?;
+println!("Pressure: {:.1} hPa", hpa);
+
+// Read ambient temperature
+let temp = pressure.temperature()?;
+println!("Temperature: {:.1}°C", temp);
+```
+
+### Example: Color & Light Sensor
+
+```rust
+use modulino::Light;
+
+let mut light = Light::new(i2c);
+light.init()?;
+
+// Read all color channels
+let measurement = light.read()?;
+println!("Red: {}, Green: {}, Blue: {}, IR: {}", 
+    measurement.red, measurement.green, measurement.blue, measurement.ir);
+```
+
 ## Features
 
 - `defmt`: Enable `defmt` formatting for error types (useful for embedded debugging)
@@ -248,4 +296,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Acknowledgments
 
-This library is inspired by the [Arduino Modulino MicroPython library](https://github.com/arduino/arduino-modulino-mpy).
+This library is inspired by the [Arduino Modulino MicroPython library](https://github.com/arduino/arduino-modulino-mpy)
+and [Arduino Modulino C++ library](https://github.com/arduino-libraries/Arduino_Modulino)

@@ -14,6 +14,9 @@
 //! - [`Joystick`] - Analog joystick with button
 //! - [`LatchRelay`] - Latching relay module
 //! - [`Vibro`] - Vibration motor module
+//! - [`LedMatrix`] - 12x8 LED matrix display
+//! - [`Pressure`] - Barometric pressure and temperature sensor
+//! - [`Light`] - RGB and ambient light sensor
 //!
 //! ## Example
 //!
@@ -53,8 +56,11 @@ mod i2c_device;
 mod joystick;
 mod knob;
 mod latch_relay;
+mod led_matrix;
+mod light;
 mod movement;
 mod pixels;
+mod pressure;
 mod thermo;
 mod vibro;
 
@@ -67,8 +73,11 @@ pub use i2c_device::I2cDevice;
 pub use joystick::Joystick;
 pub use knob::Knob;
 pub use latch_relay::LatchRelay;
+pub use led_matrix::LedMatrix;
+pub use light::{Gain, Light, LightMeasurement, MeasurementRate, Resolution};
 pub use movement::{Movement, MovementValues};
 pub use pixels::Pixels;
+pub use pressure::Pressure;
 pub use thermo::{Hs3003Error, Thermo, ThermoMeasurement};
 pub use vibro::{PowerLevel, Vibro};
 
@@ -106,6 +115,15 @@ pub mod addresses {
 
     /// Default address for Modulino Vibro (0x70 >> 1 = 0x38)
     pub const VIBRO: u8 = 0x38;
+
+    /// Default address for Modulino Light
+    pub const LIGHT: u8 = 0x53;
+
+    /// Default address for Modulino Pressure
+    pub const PRESSURE: u8 = 0x5C;
+
+    /// Default address for Modulino LED Matrix
+    pub const LED_MATRIX: u8 = 0x39;
 }
 
 /// Pinstrap address map for device type detection.
