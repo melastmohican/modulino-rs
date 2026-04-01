@@ -1,6 +1,6 @@
 [package]
 name = "modulino"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Mariusz Jurgielewicz <mordor@mail.com>"]
 description = "A hardware-agnostic, no_std Rust driver for Arduino Modulino breakout boards"
