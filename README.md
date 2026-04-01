@@ -26,7 +26,7 @@ This crate provides drivers for the Arduino Modulino family of breakout boards, 
 | `Vibro` | Custom MCU | **Internal** | 0x38 |
 | `LedMatrix` | IS31FL3733 | **Internal (Experimental)** | 0x39 |
 | `Pressure` | LPS22HB | **Internal (Experimental)** | 0x5C |
-| `Light` | LTR-381RGB | **Internal (Experimental)** | 0x53 |
+| `Light` | LTR-381RGB | **Internal** | 0x53 |
 
 ## Usage
 
@@ -244,8 +244,12 @@ use modulino::Light;
 let mut light = Light::new(i2c);
 light.init()?;
 
-// Read all color channels
+// Read all color channels and calculations
 let measurement = light.read()?;
+println!("Lux: {:.2}", measurement.lux);
+println!("Color: {}", measurement.color_name()); // e.g. "VIVID RED"
+
+// Access raw RGB and IR channels
 println!("Red: {}, Green: {}, Blue: {}, IR: {}", 
     measurement.red, measurement.green, measurement.blue, measurement.ir);
 ```
@@ -285,8 +289,8 @@ This crate requires Rust 1.75 or later.
 
 Licensed under either of:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
 
