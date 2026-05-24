@@ -1,46 +1,105 @@
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
-use modulino::LedMatrix;
+use modulino::{DisplayMode, LedMatrix};
 
 #[test]
-fn test_led_matrix_init_and_set_pixel() {
+fn test_led_matrix_coprocessor_monochromatic() {
     let addr = 0x39;
 
-    // Create zeroed buffers for clear() expectations
-    let mut off_all = vec![0u8; 25];
-    off_all[0] = 0x00; // Starting register offset
-
-    let mut pwm_all = vec![0u8; 193];
-    pwm_all[0] = 0x00; // Starting register offset
-
     let expectations = [
-        // init() -> unlock
-        I2cTransaction::write(addr, vec![0xFE, 0xC5]),
-        // init() -> Reset (Page 3, Read 0x11)
-        I2cTransaction::write(addr, vec![0xFD, 0x03]),
-        I2cTransaction::write_read(addr, vec![0x11], vec![0x00]),
-        // init() -> Awake (Reg 0x00 = 0x01)
-        I2cTransaction::write(addr, vec![0x00, 0x01]),
-        // init() -> GCC (Reg 0x01 = 0x40)
-        I2cTransaction::write(addr, vec![0x01, 0x40]),
-        // clear() -> Page 0 (LED Control)
-        I2cTransaction::write(addr, vec![0xFD, 0x00]),
-        I2cTransaction::write(addr, off_all),
-        // clear() -> Page 1 (PWM)
-        I2cTransaction::write(addr, vec![0xFD, 0x01]),
-        I2cTransaction::write(addr, pwm_all),
-        // set_pixel(0, 0, 255)
-        // 1. Enable (Page 0, Reg 0 = |= 1)
-        I2cTransaction::write(addr, vec![0xFD, 0x00]),
-        I2cTransaction::write_read(addr, vec![0x00], vec![0x00]),
-        I2cTransaction::write(addr, vec![0x00, 0x01]),
-        // 2. PWM (Page 1, Reg 0 = 255)
-        I2cTransaction::write(addr, vec![0xFD, 0x01]),
-        I2cTransaction::write(addr, vec![0x00, 0xFF]),
+        // 1. init() calls set_mode(MonochromaticVertical)
+        // 1a. Queries current mode of the device:
+        // Simulate: Pinstrap=0x39, device is in MON mode ("MON")
+        I2cTransaction::read(addr, vec![0x39, b'M', b'O', b'N']),
+        // 1b. Writes "MON" padded to 12 bytes because device is currently in MON
+        I2cTransaction::write(addr, vec![b'M', b'O', b'N', 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+
+        // 2. set_pixel(0, 0, 255) -> sets bit 0 of column 0
+        // 3. show() writes the 12-byte buffer
+        I2cTransaction::write(addr, vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     ];
 
-    let mut matrix = LedMatrix::new(I2cMock::new(&expectations));
+    let i2c = I2cMock::new(&expectations);
+    let mut matrix = LedMatrix::new(i2c);
+
     matrix.init().unwrap();
+    assert_eq!(matrix.mode(), DisplayMode::MonochromaticVertical);
+
     matrix.set_pixel(0, 0, 255).unwrap();
+    matrix.show().unwrap();
+
+    matrix.release().done();
+}
+
+#[test]
+fn test_led_matrix_coprocessor_mode_switch() {
+    let addr = 0x39;
+
+    let expectations = [
+        // 1. init() -> queries device (returns MON) -> writes MON (12B)
+        I2cTransaction::read(addr, vec![0x39, b'M', b'O', b'N']),
+        I2cTransaction::write(addr, vec![b'M', b'O', b'N', 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+
+        // 2. set_mode(Grayscale)
+        // 2a. Queries current mode of device: returns MON
+        I2cTransaction::read(addr, vec![0x39, b'M', b'O', b'N']),
+        // 2b. Device is MON: write new mode "GS4" padded to 12 bytes
+        I2cTransaction::write(addr, vec![b'G', b'S', b'4', 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+
+        // 3. set_pixel(0, 0, 255) in grayscale (brightness 255 / 17 = 15)
+        // 4. show() writes 48-byte grayscale payload (column 0, row 0 is lower nibble of byte 0)
+        I2cTransaction::write(addr, {
+            let mut expected = vec![0u8; 48];
+            expected[0] = 15; // lower 4 bits of byte 0
+            expected
+        }),
+    ];
+
+    let i2c = I2cMock::new(&expectations);
+    let mut matrix = LedMatrix::new(i2c);
+
+    matrix.init().unwrap();
+    matrix.set_mode(DisplayMode::Grayscale).unwrap();
+    assert_eq!(matrix.mode(), DisplayMode::Grayscale);
+
+    matrix.set_pixel(0, 0, 255).unwrap();
+    matrix.show().unwrap();
+
+    matrix.release().done();
+}
+
+#[test]
+fn test_led_matrix_coprocessor_horizontal() {
+    let addr = 0x39;
+
+    let expectations = [
+        // 1. init() -> queries device (returns MON) -> writes MON (12B)
+        I2cTransaction::read(addr, vec![0x39, b'M', b'O', b'N']),
+        I2cTransaction::write(addr, vec![b'M', b'O', b'N', 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+
+        // 2. set_mode(MonochromaticHorizontal)
+        // 2a. Queries current mode of device: returns MON
+        I2cTransaction::read(addr, vec![0x39, b'M', b'O', b'N']),
+        // 2b. Device is MON: write new mode "MON" padded to 12 bytes
+        I2cTransaction::write(addr, vec![b'M', b'O', b'N', 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+
+        // 3. set_pixel(0, 0, 255) in row-major horizontal:
+        // bit index = 0 * 12 + 0 = 0.
+        // Byte 0 bit offset 7.
+        // So byte 0 becomes 0x80.
+        // On show(), it is converted to column-major (vertical).
+        // Row 0 of Column 0 corresponds to bit 0 of Column 0 byte.
+        // So Column 0 byte (byte 0) should be 1.
+        I2cTransaction::write(addr, vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    ];
+
+    let i2c = I2cMock::new(&expectations);
+    let mut matrix = LedMatrix::new(i2c);
+
+    matrix.init().unwrap();
+    matrix.set_mode(DisplayMode::MonochromaticHorizontal).unwrap();
+    
+    matrix.set_pixel(0, 0, 255).unwrap();
+    matrix.show().unwrap();
 
     matrix.release().done();
 }

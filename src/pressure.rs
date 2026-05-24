@@ -43,6 +43,22 @@ where
         }
     }
 
+    /// Discover if a Pressure module is connected.
+    ///
+    /// Probes the default/match addresses and returns the first one that ACKs.
+    ///
+    /// > [!WARNING]
+    /// > **EXPERIMENTAL**: This feature is a work-in-progress and has NOT yet been tested on physical hardware.
+    pub fn discover(i2c: &mut I2C) -> Result<u8, E> {
+        let addresses = [addresses::PRESSURE];
+        for &addr in &addresses {
+            if i2c.write(addr, &[]).is_ok() {
+                return Ok(addr);
+            }
+        }
+        i2c.write(addresses[0], &[]).map(|_| addresses[0]).map_err(Error::I2c)
+    }
+
     /// Initialize the sensor.
     pub fn init(&mut self) -> Result<(), E> {
         let mut id = [0u8; 1];

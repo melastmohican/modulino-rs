@@ -3,7 +3,7 @@
 //! The Modulino Buzzer module contains a piezo speaker that can play tones
 //! at specified frequencies.
 
-use crate::{addresses, I2cDevice, Result};
+use crate::{addresses, Error, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
 
 /// Musical note frequencies in Hz.
@@ -134,6 +134,22 @@ where
     /// Create a new Buzzer instance with the default address.
     pub fn new(i2c: I2C) -> Result<Self, E> {
         Self::new_with_address(i2c, addresses::BUZZER)
+    }
+
+    /// Discover if a Buzzer module is connected.
+    ///
+    /// Probes the default/match addresses and returns the first one that ACKs.
+    ///
+    /// > [!WARNING]
+    /// > **EXPERIMENTAL**: This feature is a work-in-progress and has NOT yet been tested on physical hardware.
+    pub fn discover(i2c: &mut I2C) -> Result<u8, E> {
+        let addresses = [addresses::BUZZER];
+        for &addr in &addresses {
+            if i2c.write(addr, &[]).is_ok() {
+                return Ok(addr);
+            }
+        }
+        i2c.write(addresses[0], &[]).map(|_| addresses[0]).map_err(Error::I2c)
     }
 
     /// Create a new Buzzer instance with a custom address.

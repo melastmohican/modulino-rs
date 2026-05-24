@@ -88,6 +88,22 @@ where
         Self::new_with_address(i2c, addresses::MOVEMENT[0])
     }
 
+    /// Discover if a Movement module is connected.
+    ///
+    /// Probes the default/match addresses and returns the first one that ACKs.
+    ///
+    /// > [!WARNING]
+    /// > **EXPERIMENTAL**: This feature is a work-in-progress and has NOT yet been tested on physical hardware.
+    pub fn discover(i2c: &mut I2C) -> Result<u8, E> {
+        let addresses = addresses::MOVEMENT;
+        for &addr in &addresses {
+            if i2c.write(addr, &[]).is_ok() {
+                return Ok(addr);
+            }
+        }
+        i2c.write(addresses[0], &[]).map(|_| addresses[0]).map_err(Error::I2c)
+    }
+
     /// Create a new Movement instance with a custom address.
     ///
     /// Valid addresses are 0x6A or 0x6B depending on the SA0 pin configuration.

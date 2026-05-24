@@ -253,9 +253,30 @@ where
 
     /// Create a new Light instance.
     pub fn new(i2c: I2C) -> Self {
+        Self::new_with_address(i2c, addresses::LIGHT)
+    }
+
+    /// Discover if a Light module is connected.
+    ///
+    /// Probes the default/match addresses and returns the first one that ACKs.
+    ///
+    /// > [!WARNING]
+    /// > **EXPERIMENTAL**: This feature is a work-in-progress and has NOT yet been tested on physical hardware.
+    pub fn discover(i2c: &mut I2C) -> Result<u8, E> {
+        let addresses = [addresses::LIGHT];
+        for &addr in &addresses {
+            if i2c.write(addr, &[]).is_ok() {
+                return Ok(addr);
+            }
+        }
+        i2c.write(addresses[0], &[]).map(|_| addresses[0]).map_err(Error::I2c)
+    }
+
+    /// Create a new Light instance with a custom address.
+    pub fn new_with_address(i2c: I2C, address: u8) -> Self {
         Self {
             i2c,
-            address: addresses::LIGHT,
+            address,
             current_gain: Gain::Gain18x,
             current_res: Resolution::Res16Bit,
         }

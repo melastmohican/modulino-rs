@@ -52,6 +52,7 @@ mod buzzer;
 mod color;
 mod distance;
 mod error;
+mod hub;
 mod i2c_device;
 mod joystick;
 mod knob;
@@ -59,6 +60,7 @@ mod latch_relay;
 mod led_matrix;
 mod light;
 mod movement;
+mod opto_relay;
 mod pixels;
 mod pressure;
 mod thermo;
@@ -69,13 +71,15 @@ pub use buzzer::{Buzzer, Note};
 pub use color::Color;
 pub use distance::Distance;
 pub use error::{Error, Result};
+pub use hub::{Hub, HubPort};
 pub use i2c_device::I2cDevice;
 pub use joystick::Joystick;
 pub use knob::Knob;
 pub use latch_relay::LatchRelay;
-pub use led_matrix::LedMatrix;
+pub use led_matrix::{DisplayMode, LedMatrix};
 pub use light::{Gain, Light, LightMeasurement, MeasurementRate, Resolution};
 pub use movement::{Movement, MovementValues};
+pub use opto_relay::OptoRelay;
 pub use pixels::Pixels;
 pub use pressure::Pressure;
 pub use thermo::{Hs3003Error, Thermo, ThermoMeasurement};
@@ -113,6 +117,9 @@ pub mod addresses {
     /// Default address for Modulino Latch Relay (0x04 >> 1 = 0x02)
     pub const LATCH_RELAY: u8 = 0x02;
 
+    /// Default address for Modulino Opto Relay (0x28 >> 1 = 0x14)
+    pub const OPTO_RELAY: u8 = 0x14;
+
     /// Default address for Modulino Vibro (0x70 >> 1 = 0x38)
     pub const VIBRO: u8 = 0x38;
 
@@ -148,6 +155,9 @@ pub mod pinstrap {
 
     /// Pinstrap address for Latch Relay
     pub const LATCH_RELAY: u8 = 0x04;
+
+    /// Pinstrap address for Opto Relay
+    pub const OPTO_RELAY: u8 = 0x28;
 
     /// Pinstrap address for Vibro
     pub const VIBRO: u8 = 0x70;

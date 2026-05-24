@@ -2,7 +2,7 @@
 //!
 //! The Modulino Vibro module contains a vibration motor.
 
-use crate::{addresses, I2cDevice, Result};
+use crate::{addresses, Error, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
 
 /// Predefined power levels for the vibration motor.
@@ -15,16 +15,16 @@ pub enum PowerLevel {
     /// Gentle vibration
     Gentle = 25,
     /// Moderate vibration
-    Moderate = 35,
+    Moderate = 30,
     /// Medium vibration
     #[default]
-    Medium = 45,
+    Medium = 35,
     /// Intense vibration
-    Intense = 55,
+    Intense = 40,
     /// Powerful vibration
-    Powerful = 65,
+    Powerful = 45,
     /// Maximum vibration
-    Maximum = 75,
+    Maximum = 50,
 }
 
 impl PowerLevel {
@@ -73,6 +73,22 @@ where
     /// Create a new Vibro instance with the default address.
     pub fn new(i2c: I2C) -> Result<Self, E> {
         Self::new_with_address(i2c, addresses::VIBRO)
+    }
+
+    /// Discover if a Vibro module is connected.
+    ///
+    /// Probes the default/match addresses and returns the first one that ACKs.
+    ///
+    /// > [!WARNING]
+    /// > **EXPERIMENTAL**: This feature is a work-in-progress and has NOT yet been tested on physical hardware.
+    pub fn discover(i2c: &mut I2C) -> Result<u8, E> {
+        let addresses = [addresses::VIBRO];
+        for &addr in &addresses {
+            if i2c.write(addr, &[]).is_ok() {
+                return Ok(addr);
+            }
+        }
+        i2c.write(addresses[0], &[]).map(|_| addresses[0]).map_err(Error::I2c)
     }
 
     /// Create a new Vibro instance with a custom address.
@@ -150,7 +166,7 @@ where
 
     /// Turn off the vibration motor.
     pub fn off(&mut self) -> Result<(), E> {
-        let data = [0u8; 12];
+        let data = [0u8; 8];
         self.device.write(&data)?;
         Ok(())
     }

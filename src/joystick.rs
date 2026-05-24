@@ -2,7 +2,7 @@
 //!
 //! The Modulino Joystick module is an analog joystick with a push button.
 
-use crate::{addresses, I2cDevice, Result};
+use crate::{addresses, Error, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
 
 /// Driver for the Modulino Joystick module.
@@ -41,11 +41,27 @@ where
     I2C: I2c<Error = E>,
 {
     /// Default deadzone threshold.
-    pub const DEFAULT_DEADZONE: u8 = 10;
+    pub const DEFAULT_DEADZONE: u8 = 26;
 
     /// Create a new Joystick instance with the default address.
     pub fn new(i2c: I2C) -> Result<Self, E> {
         Self::new_with_address(i2c, addresses::JOYSTICK)
+    }
+
+    /// Discover if a Joystick module is connected.
+    ///
+    /// Probes the default/match addresses and returns the first one that ACKs.
+    ///
+    /// > [!WARNING]
+    /// > **EXPERIMENTAL**: This feature is a work-in-progress and has NOT yet been tested on physical hardware.
+    pub fn discover(i2c: &mut I2C) -> Result<u8, E> {
+        let addresses = [addresses::JOYSTICK];
+        for &addr in &addresses {
+            if i2c.write(addr, &[]).is_ok() {
+                return Ok(addr);
+            }
+        }
+        i2c.write(addresses[0], &[]).map(|_| addresses[0]).map_err(Error::I2c)
     }
 
     /// Create a new Joystick instance with a custom address.
@@ -69,19 +85,6 @@ where
         self.device.address
     }
 
-    /// Apply deadzone logic to normalize coordinates.
-    fn normalize_coordinate(&self, raw: u8) -> i8 {
-        // Convert from 0-255 range to -128 to 127 range
-        let centered = (raw as i16) - 128;
-
-        // Apply deadzone
-        if centered.abs() < self.deadzone as i16 {
-            0
-        } else {
-            centered as i8
-        }
-    }
-
     /// Update the joystick state.
     ///
     /// This should be called periodically to read the latest values.
@@ -95,11 +98,20 @@ where
         self.device.read(&mut buf)?;
 
         // Skip first byte (pinstrap address)
-        let raw_x = buf[1];
-        let raw_y = buf[2];
+        let mut raw_x = buf[1];
+        let mut raw_y = buf[2];
 
-        self.x = self.normalize_coordinate(raw_x);
-        self.y = self.normalize_coordinate(raw_y);
+        // Apply joint rectangular deadzone matching reference C++ exactly:
+        // Snap to 128 (center) only if BOTH coordinates are within the deadzone threshold.
+        let dx = (raw_x as i16) - 128;
+        let dy = (raw_y as i16) - 128;
+        if dx.abs() < self.deadzone as i16 && dy.abs() < self.deadzone as i16 {
+            raw_x = 128;
+            raw_y = 128;
+        }
+
+        self.x = ((raw_x as i16) - 128) as i8;
+        self.y = ((raw_y as i16) - 128) as i8;
         self.button_pressed = buf[3] != 0;
 
         Ok(self.x != previous_x || self.y != previous_y || self.button_pressed != previous_button)

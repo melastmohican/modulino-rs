@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-24
+
+### Added
+- Native, optimized internal driver for **Modulino LED Matrix** (`LedMatrix`).
+- Native internal driver for **Modulino Light** (`Light`) sensor with 1:1 parity with Arduino C++ implementation.
+- Native internal driver for **Modulino Pressure** (`Pressure`) sensor (untested/experimental).
+- Native internal driver for **Modulino Opto Relay** (`OptoRelay`) module (untested/experimental).
+- Native internal driver for **Modulino Hub** (`Hub` / I2C multiplexer) for TCA9548A (untested/experimental).
+- Examples and extensive unit/mock tests for the new drivers.
+
+### Fixed
+- Fixed redundant display buffer zeroing loops in the LED Matrix driver to optimize rendering performance.
+- Resolved various Clippy lint warnings to improve code cleanliness.
+- Modernized Continuous Integration (CI) workflows to use Node 24 and eliminate deprecation warnings.
+
 ## [0.1.0] - 2026-02-01
 
 ### Added
@@ -25,5 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `defmt` feature for embedded debugging support
 - Comprehensive documentation and examples
 
-[Unreleased]: https://github.com/melastmohican/modulino-rs/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/melastmohican/modulino-rs/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/melastmohican/modulino-rs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/melastmohican/modulino-rs/releases/tag/v0.1.0

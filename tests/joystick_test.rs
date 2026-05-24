@@ -56,3 +56,26 @@ fn test_joystick_deadzone() {
 
     joystick.release().done();
 }
+
+#[test]
+fn test_joystick_joint_deadzone() {
+    let addr = 0x2C;
+
+    let expectations = [
+        // 1. new()
+        I2cTransaction::read(addr, vec![0x58, 128, 128, 0]),
+        // 2. update() - X is within deadzone (135 -> +7), but Y is outside (160 -> +32)
+        // Since Y is outside, NEITHER should be snapped!
+        I2cTransaction::read(addr, vec![0x58, 135, 160, 0]),
+    ];
+
+    let i2c = I2cMock::new(&expectations);
+    let mut joystick = Joystick::new(i2c).unwrap();
+
+    joystick.update().unwrap();
+
+    assert_eq!(joystick.x(), 7); // Should NOT be snapped to 0
+    assert_eq!(joystick.y(), 32);
+
+    joystick.release().done();
+}

@@ -1,165 +1,246 @@
 //! Modulino LED Matrix driver.
 //!
-//! The Modulino LED Matrix module uses an IS31FL3733 LED driver
-//! for controlling a 6x16 LED matrix.
-//!
-//! > [!WARNING]
-//! > **EXPERIMENTAL**: This driver is a work-in-progress and has only been verified via
-//! > unit tests using I2C mocks. It has NOT yet been tested on physical Modulino hardware.
-//!
-//! Note: This is an internal implementation because the existing `is31fl3733` crate (v0.5.0)
-//! has a visibility issue where the required `Blocking` and `Async` mode types are not
-//! exported, making the driver struct impossible to name in external code.
-//!
-//! If the `is31fl3733` crate fixes its exports, this can be moved to an external wrapper.
+//! The Modulino LED Matrix module consists of a 12x8 LED matrix display (96 LEDs)
+//! driven by a firmware coprocessor over I2C.
 
-use crate::{addresses, Error, Result};
+use crate::{addresses, Error, I2cDevice, Result};
 use embedded_hal::i2c::I2c;
 
-/// Driver for the Modulino LED Matrix module (IS31FL3733 driver).
-///
-/// This is a custom `no_std` driver implemented specifically for Modulino's
-/// 6x16 / 12x8 matrix configuration.
+/// Display mode for the LED Matrix.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum DisplayMode {
+    /// Monochromatic Vertical (column-major) mode (default).
+    #[default]
+    MonochromaticVertical,
+    /// Monochromatic Horizontal (row-major) mode.
+    MonochromaticHorizontal,
+    /// Grayscale mode (4-bit per pixel).
+    Grayscale,
+}
+
+/// Driver for the Modulino LED Matrix module.
 pub struct LedMatrix<I2C> {
-    i2c: I2C,
-    address: u8,
+    device: I2cDevice<I2C>,
+    mode: DisplayMode,
+    buffer: [u8; 48],
 }
 
 impl<I2C, E> LedMatrix<I2C>
 where
     I2C: I2c<Error = E>,
 {
-    const REG_COMMAND: u8 = 0xFD;
-    const REG_WRITE_LOCK: u8 = 0xFE;
-
-    const PAGE_LED_CONTROL: u8 = 0x00;
-    const PAGE_PWM_CONTROL: u8 = 0x01;
-    const PAGE_FUNCTION: u8 = 0x03;
-
-    const REG_FUNCTION_CONFIG: u8 = 0x00;
-    const REG_FUNCTION_GCC: u8 = 0x01;
-    const REG_FUNCTION_RESET: u8 = 0x11;
-
-    /// Create a new LedMatrix instance.
+    /// Create a new LedMatrix instance with the default address.
     pub fn new(i2c: I2C) -> Self {
+        Self::new_with_address(i2c, addresses::LED_MATRIX)
+    }
+
+    /// Discover if an LedMatrix module is connected.
+    ///
+    /// Probes the default/match addresses and returns the first one that ACKs.
+    ///
+    /// > [!WARNING]
+    /// > **EXPERIMENTAL**: This feature is a work-in-progress and has NOT yet been tested on physical hardware.
+    pub fn discover(i2c: &mut I2C) -> Result<u8, E> {
+        let addresses = [addresses::LED_MATRIX];
+        for &addr in &addresses {
+            if i2c.write(addr, &[]).is_ok() {
+                return Ok(addr);
+            }
+        }
+        i2c.write(addresses[0], &[]).map(|_| addresses[0]).map_err(Error::I2c)
+    }
+
+    /// Create a new LedMatrix instance with a custom address.
+    pub fn new_with_address(i2c: I2C, address: u8) -> Self {
         Self {
-            i2c,
-            address: addresses::LED_MATRIX,
+            device: I2cDevice::new(i2c, address),
+            mode: DisplayMode::default(),
+            buffer: [0u8; 48],
         }
     }
 
-    /// Initialize the LED matrix.
+    /// Initialize the LED matrix and set it to default Monochromatic Vertical mode.
     pub fn init(&mut self) -> Result<(), E> {
-        self.unlock()?;
-
-        // Reset device
-        self.select_page(Self::PAGE_FUNCTION)?;
-        let mut _reset = [0u8; 1];
-        self.i2c
-            .write_read(self.address, &[Self::REG_FUNCTION_RESET], &mut _reset)
-            .map_err(Error::I2c)?;
-
-        // Enable Normal Operation (wake up)
-        self.i2c
-            .write(self.address, &[Self::REG_FUNCTION_CONFIG, 0x01])
-            .map_err(Error::I2c)?;
-
-        // Set Global Control Current
-        self.i2c
-            .write(self.address, &[Self::REG_FUNCTION_GCC, 0x40])
-            .map_err(Error::I2c)?;
-
-        // Clear all (turn off all LEDs)
-        self.clear()?;
-
+        self.set_mode(DisplayMode::MonochromaticVertical)?;
         Ok(())
     }
 
-    /// Turn off all LEDs and set PWM values to zero.
-    pub fn clear(&mut self) -> Result<(), E> {
-        // Clear LED control registers (off)
-        self.select_page(Self::PAGE_LED_CONTROL)?;
-        let mut off = [0u8; 25];
-        off[0] = 0x00; // Starting register
-        self.i2c.write(self.address, &off).map_err(Error::I2c)?;
-
-        // Clear PWM registers (zero brightness)
-        self.select_page(Self::PAGE_PWM_CONTROL)?;
-        let mut pwm = [0u8; 193];
-        pwm[0] = 0x00; // Starting register
-        self.i2c.write(self.address, &pwm).map_err(Error::I2c)?;
-
-        Ok(())
-    }
-
-    /// Set the brightness of a specific LED.
+    /// Set the display mode for the LED matrix.
     ///
-    /// # Arguments
-    /// * `x` - Column index (0-15)
-    /// * `y` - Row index (0-5)
-    /// * `brightness` - PWM value (0-255)
+    /// This queries the current mode on the device and performs the appropriate
+    /// mode-switch payload write.
+    pub fn set_mode(&mut self, mode: DisplayMode) -> Result<(), E> {
+        // Query the current mode from the device by reading 4 bytes (1 pinstrap + 3 identifier)
+        let mut query_buf = [0u8; 4];
+        self.device.read(&mut query_buf)?;
+
+        let device_is_grayscale = &query_buf[1..4] == b"GS4";
+
+        // To switch the mode, the write transaction must match the size expected by
+        // the *current* device mode (48 bytes if currently in grayscale, 12 bytes if monochromatic).
+        if device_is_grayscale {
+            let mut payload = [0u8; 48];
+            match mode {
+                DisplayMode::Grayscale => {
+                    payload[0..3].copy_from_slice(b"GS4");
+                }
+                _ => {
+                    payload[0..3].copy_from_slice(b"MON");
+                }
+            }
+            self.device.write(&payload)?;
+        } else {
+            let mut payload = [0u8; 12];
+            match mode {
+                DisplayMode::Grayscale => {
+                    payload[0..3].copy_from_slice(b"GS4");
+                }
+                _ => {
+                    payload[0..3].copy_from_slice(b"MON");
+                }
+            }
+            self.device.write(&payload)?;
+        }
+
+        self.mode = mode;
+        self.clear_buffer();
+        Ok(())
+    }
+
+    /// Get the current display mode.
+    pub fn mode(&self) -> DisplayMode {
+        self.mode
+    }
+
+    /// Clear the local frame buffer.
+    fn clear_buffer(&mut self) {
+        self.buffer = [0u8; 48];
+    }
+
+    /// Turn off all LEDs and update the display.
+    pub fn clear(&mut self) -> Result<(), E> {
+        self.clear_buffer();
+        self.show()
+    }
+
+    /// Set the brightness of a specific pixel (0-255).
+    ///
+    /// If the display is in Grayscale mode, this maps the 0-255 brightness value
+    /// to the 4-bit grayscale range (0-15). In monochromatic modes, a non-zero
+    /// brightness turns the LED on.
     pub fn set_pixel(&mut self, x: u8, y: u8, brightness: u8) -> Result<(), E> {
-        if x >= 16 || y >= 6 {
+        match self.mode {
+            DisplayMode::Grayscale => {
+                let val_4bit = brightness / 17; // scale 0..255 to 0..15
+                self.set_grayscale_pixel(x, y, val_4bit)?;
+            }
+            DisplayMode::MonochromaticVertical => {
+                if x >= 12 || y >= 8 {
+                    return Err(Error::InvalidParameter);
+                }
+                let byte_idx = x as usize;
+                if brightness > 0 {
+                    self.buffer[byte_idx] |= 1 << y;
+                } else {
+                    self.buffer[byte_idx] &= !(1 << y);
+                }
+            }
+            DisplayMode::MonochromaticHorizontal => {
+                if x >= 12 || y >= 8 {
+                    return Err(Error::InvalidParameter);
+                }
+                let pixel_idx = (y * 12 + x) as usize;
+                let byte_idx = pixel_idx / 8;
+                let bit_offset = 7 - (pixel_idx % 8);
+                if brightness > 0 {
+                    self.buffer[byte_idx] |= 1 << bit_offset;
+                } else {
+                    self.buffer[byte_idx] &= !(1 << bit_offset);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Set the 4-bit grayscale value (0-15) of a specific pixel (Grayscale mode only).
+    pub fn set_grayscale_pixel(&mut self, x: u8, y: u8, value: u8) -> Result<(), E> {
+        if x >= 12 || y >= 8 {
             return Err(Error::InvalidParameter);
         }
+        let col_offset = (x as usize) * 4;
+        let byte_idx = col_offset + (y as usize) / 2;
+        let val_4bit = value & 0x0F;
+        let is_upper = (y % 2) != 0;
 
-        // 1. Enable the LED (Page 0)
-        self.select_page(Self::PAGE_LED_CONTROL)?;
-        let byte_offset = (y << 1) + (x >> 3); // 2 bytes per row
-        let bit_offset = x % 8;
-
-        let mut current_state = [0u8; 1];
-        self.i2c
-            .write_read(self.address, &[byte_offset], &mut current_state)
-            .map_err(Error::I2c)?;
-
-        if brightness > 0 {
-            current_state[0] |= 1 << bit_offset;
+        if is_upper {
+            self.buffer[byte_idx] = (self.buffer[byte_idx] & 0x0F) | (val_4bit << 4);
         } else {
-            current_state[0] &= !(1 << bit_offset);
+            self.buffer[byte_idx] = (self.buffer[byte_idx] & 0xF0) | val_4bit;
         }
-        self.i2c
-            .write(self.address, &[byte_offset, current_state[0]])
-            .map_err(Error::I2c)?;
-
-        // 2. Set PWM (Page 1)
-        self.select_page(Self::PAGE_PWM_CONTROL)?;
-        let pwm_offset = (y << 4) + x;
-        self.i2c
-            .write(self.address, &[pwm_offset, brightness])
-            .map_err(Error::I2c)?;
-
         Ok(())
     }
 
-    /// Update the display (placeholder as some chips use a 'show' trigger,
-    /// but IS31FL3733 updates immediately upon I2C write).
+    /// Set the entire active frame from a slice.
+    ///
+    /// Expects 12 bytes for monochromatic modes or 48 bytes for grayscale mode.
+    pub fn set_frame(&mut self, frame: &[u8]) -> Result<(), E> {
+        let expected_size = match self.mode {
+            DisplayMode::Grayscale => 48,
+            _ => 12,
+        };
+        if frame.len() < expected_size {
+            return Err(Error::InvalidParameter);
+        }
+        self.buffer[0..expected_size].copy_from_slice(&frame[0..expected_size]);
+        self.show()
+    }
+
+    /// Convert row-major monochromatic horizontal data to column-major vertical.
+    fn convert_to_column_major(data: &mut [u8; 12]) {
+        let mut col_major = [0u8; 12];
+        for col in 0..12 {
+            for row in 0..8 {
+                let pixel_idx = row * 12 + col;
+                let src_byte = pixel_idx / 8;
+                let src_bit = 7 - (pixel_idx % 8);
+                if ((data[src_byte] >> src_bit) & 1) != 0 {
+                    col_major[col] |= 1 << row;
+                }
+            }
+        }
+        *data = col_major;
+    }
+
+    /// Render the current local buffer to the display.
     pub fn show(&mut self) -> Result<(), E> {
+        match self.mode {
+            DisplayMode::MonochromaticVertical => {
+                self.device.write(&self.buffer[0..12])?;
+            }
+            DisplayMode::MonochromaticHorizontal => {
+                let mut col_major = [0u8; 12];
+                col_major.copy_from_slice(&self.buffer[0..12]);
+                Self::convert_to_column_major(&mut col_major);
+                self.device.write(&col_major)?;
+            }
+            DisplayMode::Grayscale => {
+                self.device.write(&self.buffer[0..48])?;
+            }
+        }
         Ok(())
     }
 
-    fn unlock(&mut self) -> Result<(), E> {
-        self.i2c
-            .write(self.address, &[Self::REG_WRITE_LOCK, 0xC5])
-            .map_err(Error::I2c)
-    }
-
-    fn select_page(&mut self, page: u8) -> Result<(), E> {
-        self.i2c
-            .write(self.address, &[Self::REG_COMMAND, page])
-            .map_err(Error::I2c)
-    }
-
-    /// Set global current control (overall brightness limit).
-    pub fn set_global_current(&mut self, current: u8) -> Result<(), E> {
-        self.select_page(Self::PAGE_FUNCTION)?;
-        self.i2c
-            .write(self.address, &[Self::REG_FUNCTION_GCC, current])
-            .map_err(Error::I2c)
+    /// Get the current local buffer.
+    pub fn buffer(&self) -> &[u8] {
+        match self.mode {
+            DisplayMode::Grayscale => &self.buffer[0..48],
+            _ => &self.buffer[0..12],
+        }
     }
 
     /// Release the I2C bus.
     pub fn release(self) -> I2C {
-        self.i2c
+        self.device.release()
     }
 }

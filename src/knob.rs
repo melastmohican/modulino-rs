@@ -32,6 +32,9 @@ pub struct Knob<I2C> {
     value: i16,
     pressed: bool,
     range: Option<(i16, i16)>,
+    bug_on_set: bool,
+    last_position: i16,
+    last_debounce_time: u32,
 }
 
 impl<I2C, E> Knob<I2C>
@@ -43,6 +46,22 @@ where
         Self::new_with_address(i2c, addresses::KNOB[0])
     }
 
+    /// Discover if a Knob module is connected.
+    ///
+    /// Probes the default/match addresses and returns the first one that ACKs.
+    ///
+    /// > [!WARNING]
+    /// > **EXPERIMENTAL**: This feature is a work-in-progress and has NOT yet been tested on physical hardware.
+    pub fn discover(i2c: &mut I2C) -> Result<u8, E> {
+        let addresses = addresses::KNOB;
+        for &addr in &addresses {
+            if i2c.write(addr, &[]).is_ok() {
+                return Ok(addr);
+            }
+        }
+        i2c.write(addresses[0], &[]).map(|_| addresses[0]).map_err(Error::I2c)
+    }
+
     /// Create a new Knob instance with a custom address.
     pub fn new_with_address(i2c: I2C, address: u8) -> Result<Self, E> {
         let mut knob = Self {
@@ -50,9 +69,29 @@ where
             value: 0,
             pressed: false,
             range: None,
+            bug_on_set: false,
+            last_position: 0,
+            last_debounce_time: 0,
         };
 
-        // Read initial state
+        // Read initial state and detect firmware bug
+        let (initial_val, pressed) = knob.read_data()?;
+        
+        // Write 100 to test set/get compatibility
+        knob.set_value_internal(100)?;
+        let (test_val, _) = knob.read_data()?;
+        if test_val != 100 {
+            knob.bug_on_set = true;
+            knob.set_value_internal(-initial_val)?;
+        } else {
+            knob.set_value_internal(initial_val)?;
+        }
+
+        knob.value = initial_val;
+        knob.pressed = pressed;
+        knob.last_position = initial_val;
+
+        // Apply range constraints and final update
         knob.update()?;
 
         Ok(knob)
@@ -122,7 +161,10 @@ where
     }
 
     /// Internal method to set the encoder value on the device.
-    fn set_value_internal(&mut self, value: i16) -> Result<(), E> {
+    fn set_value_internal(&mut self, mut value: i16) -> Result<(), E> {
+        if self.bug_on_set {
+            value = -value;
+        }
         let bytes = value.to_le_bytes();
         let data = [bytes[0], bytes[1], 0, 0];
         self.device.write(&data)?;
@@ -180,6 +222,36 @@ where
         } else {
             diff
         }
+    }
+
+    /// Get the rotation direction since the last position with a 30ms debounce check.
+    ///
+    /// The user must provide the current timestamp in milliseconds.
+    /// Returns:
+    /// - `1` for clockwise rotation
+    /// - `-1` for counter-clockwise rotation
+    /// - `0` for no rotation or if within debounce period
+    pub fn direction(&mut self, now_ms: u32) -> Result<i8, E> {
+        if now_ms.wrapping_sub(self.last_debounce_time) < 30 {
+            return Ok(0);
+        }
+
+        self.update()?;
+        let current = self.value;
+        let mut dir = 0;
+
+        if current > self.last_position {
+            dir = 1;
+        } else if current < self.last_position {
+            dir = -1;
+        }
+
+        if dir != 0 {
+            self.last_debounce_time = now_ms;
+            self.last_position = current;
+        }
+
+        Ok(dir)
     }
 
     /// Release the I2C bus.

@@ -24,9 +24,11 @@ This crate provides drivers for the Arduino Modulino family of breakout boards, 
 | `Joystick` | Custom MCU | **Internal** | 0x2C |
 | `LatchRelay` | Custom MCU | **Internal** | 0x02 |
 | `Vibro` | Custom MCU | **Internal** | 0x38 |
-| `LedMatrix` | IS31FL3733 | **Internal (Experimental)** | 0x39 |
+| `LedMatrix` | IS31FL3733 | **Internal** | 0x39 |
 | `Pressure` | LPS22HB | **Internal (Experimental)** | 0x5C |
 | `Light` | LTR-381RGB | **Internal** | 0x53 |
+| `OptoRelay` | Custom MCU | **Internal (Experimental)** | 0x14 |
+| `Hub` | TCA9548A | **Internal (Experimental)** | 0x70 |
 
 ## Usage
 
@@ -34,7 +36,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-modulino = "0.1"
+modulino = "0.2"
 ```
 
 ### Example: RGB LEDs
@@ -254,13 +256,47 @@ println!("Red: {}, Green: {}, Blue: {}, IR: {}",
     measurement.red, measurement.green, measurement.blue, measurement.ir);
 ```
 
+### Example: Opto Relay Control
+
+```rust
+use modulino::OptoRelay;
+
+let mut relay = OptoRelay::new(i2c)?;
+
+// Turn on the opto relay
+relay.on()?;
+
+// Toggle state
+relay.toggle()?;
+
+// Turn off
+relay.off()?;
+```
+
+### Example: I2C Hub (Multiplexer)
+
+```rust
+use modulino::Hub;
+
+let mut hub = Hub::new(i2c);
+
+// Select port 2 (enables I2C channel 2)
+hub.select(2)?;
+
+// Now you can communicate with a Modulino device on channel 2
+// ...
+
+// Clear selection (disables all ports)
+hub.clear()?;
+```
+
 ## Features
 
 - `defmt`: Enable `defmt` formatting for error types (useful for embedded debugging)
 
 ```toml
 [dependencies]
-modulino = { version = "0.1", features = ["defmt"] }
+modulino = { version = "0.2", features = ["defmt"] }
 ```
 
 ## Hardware Requirements
