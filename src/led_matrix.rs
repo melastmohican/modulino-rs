@@ -199,13 +199,13 @@ where
     /// Convert row-major monochromatic horizontal data to column-major vertical.
     fn convert_to_column_major(data: &mut [u8; 12]) {
         let mut col_major = [0u8; 12];
-        for col in 0..12 {
+        for (col, col_val) in col_major.iter_mut().enumerate() {
             for row in 0..8 {
                 let pixel_idx = row * 12 + col;
                 let src_byte = pixel_idx / 8;
                 let src_bit = 7 - (pixel_idx % 8);
                 if ((data[src_byte] >> src_bit) & 1) != 0 {
-                    col_major[col] |= 1 << row;
+                    *col_val |= 1 << row;
                 }
             }
         }
