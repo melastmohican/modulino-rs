@@ -59,7 +59,9 @@ where
                 return Ok(addr);
             }
         }
-        i2c.write(addresses[0], &[]).map(|_| addresses[0]).map_err(Error::I2c)
+        i2c.write(addresses[0], &[])
+            .map(|_| addresses[0])
+            .map_err(Error::I2c)
     }
 
     /// Create a new Knob instance with a custom address.
@@ -76,7 +78,7 @@ where
 
         // Read initial state and detect firmware bug
         let (initial_val, pressed) = knob.read_data()?;
-        
+
         // Write 100 to test set/get compatibility
         knob.set_value_internal(100)?;
         let (test_val, _) = knob.read_data()?;

@@ -12,7 +12,6 @@ fn test_led_matrix_coprocessor_monochromatic() {
         I2cTransaction::read(addr, vec![0x39, b'M', b'O', b'N']),
         // 1b. Writes "MON" padded to 12 bytes because device is currently in MON
         I2cTransaction::write(addr, vec![b'M', b'O', b'N', 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-
         // 2. set_pixel(0, 0, 255) -> sets bit 0 of column 0
         // 3. show() writes the 12-byte buffer
         I2cTransaction::write(addr, vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
@@ -38,13 +37,11 @@ fn test_led_matrix_coprocessor_mode_switch() {
         // 1. init() -> queries device (returns MON) -> writes MON (12B)
         I2cTransaction::read(addr, vec![0x39, b'M', b'O', b'N']),
         I2cTransaction::write(addr, vec![b'M', b'O', b'N', 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-
         // 2. set_mode(Grayscale)
         // 2a. Queries current mode of device: returns MON
         I2cTransaction::read(addr, vec![0x39, b'M', b'O', b'N']),
         // 2b. Device is MON: write new mode "GS4" padded to 12 bytes
         I2cTransaction::write(addr, vec![b'G', b'S', b'4', 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-
         // 3. set_pixel(0, 0, 255) in grayscale (brightness 255 / 17 = 15)
         // 4. show() writes 48-byte grayscale payload (column 0, row 0 is lower nibble of byte 0)
         I2cTransaction::write(addr, {
@@ -75,13 +72,11 @@ fn test_led_matrix_coprocessor_horizontal() {
         // 1. init() -> queries device (returns MON) -> writes MON (12B)
         I2cTransaction::read(addr, vec![0x39, b'M', b'O', b'N']),
         I2cTransaction::write(addr, vec![b'M', b'O', b'N', 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-
         // 2. set_mode(MonochromaticHorizontal)
         // 2a. Queries current mode of device: returns MON
         I2cTransaction::read(addr, vec![0x39, b'M', b'O', b'N']),
         // 2b. Device is MON: write new mode "MON" padded to 12 bytes
         I2cTransaction::write(addr, vec![b'M', b'O', b'N', 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-
         // 3. set_pixel(0, 0, 255) in row-major horizontal:
         // bit index = 0 * 12 + 0 = 0.
         // Byte 0 bit offset 7.
@@ -96,8 +91,10 @@ fn test_led_matrix_coprocessor_horizontal() {
     let mut matrix = LedMatrix::new(i2c);
 
     matrix.init().unwrap();
-    matrix.set_mode(DisplayMode::MonochromaticHorizontal).unwrap();
-    
+    matrix
+        .set_mode(DisplayMode::MonochromaticHorizontal)
+        .unwrap();
+
     matrix.set_pixel(0, 0, 255).unwrap();
     matrix.show().unwrap();
 

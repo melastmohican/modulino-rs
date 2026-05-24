@@ -33,9 +33,11 @@ fn test_discover_knob_first_addr() {
 fn test_discover_knob_second_addr() {
     let expectations = [
         // First address 0x3A fails to ACK
-        I2cTransaction::write(0x3A, vec![]).with_error(embedded_hal::i2c::ErrorKind::NoAcknowledge(
-            embedded_hal::i2c::NoAcknowledgeSource::Address,
-        )),
+        I2cTransaction::write(0x3A, vec![]).with_error(
+            embedded_hal::i2c::ErrorKind::NoAcknowledge(
+                embedded_hal::i2c::NoAcknowledgeSource::Address,
+            ),
+        ),
         // Second address 0x3B ACKs
         I2cTransaction::write(0x3B, vec![]),
     ];
@@ -51,13 +53,17 @@ fn test_discover_fails() {
     let addr = 0x14; // OptoRelay default
     let expectations = [
         // Probes 0x14, fails
-        I2cTransaction::write(addr, vec![]).with_error(embedded_hal::i2c::ErrorKind::NoAcknowledge(
-            embedded_hal::i2c::NoAcknowledgeSource::Address,
-        )),
+        I2cTransaction::write(addr, vec![]).with_error(
+            embedded_hal::i2c::ErrorKind::NoAcknowledge(
+                embedded_hal::i2c::NoAcknowledgeSource::Address,
+            ),
+        ),
         // Final call to generate the typed error
-        I2cTransaction::write(addr, vec![]).with_error(embedded_hal::i2c::ErrorKind::NoAcknowledge(
-            embedded_hal::i2c::NoAcknowledgeSource::Address,
-        )),
+        I2cTransaction::write(addr, vec![]).with_error(
+            embedded_hal::i2c::ErrorKind::NoAcknowledge(
+                embedded_hal::i2c::NoAcknowledgeSource::Address,
+            ),
+        ),
     ];
 
     let mut i2c = I2cMock::new(&expectations);

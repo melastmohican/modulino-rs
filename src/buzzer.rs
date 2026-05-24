@@ -149,7 +149,9 @@ where
                 return Ok(addr);
             }
         }
-        i2c.write(addresses[0], &[]).map(|_| addresses[0]).map_err(Error::I2c)
+        i2c.write(addresses[0], &[])
+            .map(|_| addresses[0])
+            .map_err(Error::I2c)
     }
 
     /// Create a new Buzzer instance with a custom address.

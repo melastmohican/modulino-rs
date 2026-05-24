@@ -61,7 +61,7 @@ fn main() {
     // Even though they share the same physical address (`0x3E`), they are isolated
     // behind the Hub's ports 0 and 1. We must select the appropriate port before
     // initializing each button module.
-    
+
     // Select port 0 on the multiplexer and initialize Buttons A
     hub.select(0).unwrap();
     let mut buttons_a = Buttons::new(SharedI2c(&shared_i2c)).unwrap();
