@@ -28,7 +28,8 @@ This crate provides drivers for the Arduino Modulino family of breakout boards, 
 | `Pressure` | LPS22HB | **Internal (Experimental)** | 0x5C |
 | `Light` | LTR-381RGB | **Internal** | 0x53 |
 | `OptoRelay` | Custom MCU | **Internal (Experimental)** | 0x14 |
-| `Hub` | TCA9548A | **Internal (Experimental)** | 0x70 |
+| `Hub` | TCA9548A | **Internal** | 0x70 |
+| `Motors` | Coprocessor | **Internal (Experimental)** | 0x24 |
 
 ## Usage
 
@@ -271,6 +272,25 @@ relay.toggle()?;
 
 // Turn off
 relay.off()?;
+```
+
+### Example: Motors Control (Experimental)
+
+```rust
+use modulino::{Motors, DecayMode};
+
+let mut motors = Motors::new(i2c)?;
+
+// Configure steps per shaft revolution (e.g. 200)
+motors.set_steps_per_revolution(200)?;
+
+// Set DC speeds as percentage of full scale (0..100)
+motors.set_speed_a(50)?;
+motors.set_speed_b(75)?;
+
+// Switch mode to stepper and command 200 steps at 60 RPM
+motors.set_stepper_mode_enabled(true)?;
+motors.move_stepper_rpm(200, 60.0, 0)?;
 ```
 
 ### Example: I2C Hub (Multiplexer)

@@ -1,15 +1,18 @@
 //! Modulino Hub driver.
 //!
-//! > [!WARNING]
-//! > **EXPERIMENTAL**: This driver is a work-in-progress and is based on the TCA9548A I2C
-//! > multiplexer (such as the SparkFun Qwiic Mux Breakout). It has NOT yet been tested on physical
-//! > Modulino Hub hardware, as the official Modulino Hub was never officially released.
+//! The Modulino Hub is based on the TCA9548A I2C multiplexer. It allows connecting
+//! multiple Modulino modules (even those sharing the same I2C address) to different ports
+//! (0 to 7) of the Hub.
+//!
+//! For more details, see:
+//! - [Arduino Store Page](https://store-usa.arduino.cc/products/modulino-hub)
+//! - [Official Hardware Documentation](https://docs.arduino.cc/hardware/modulino-hub/)
 
 use crate::Result;
 use embedded_hal::i2c::I2c;
 
 /// Default address for the TCA9548A multiplexer (0x70).
-pub const DEFAULT_ADDRESS: u8 = 0x70;
+pub const DEFAULT_ADDRESS: u8 = crate::addresses::HUB;
 
 /// Driver for the Modulino Hub (TCA9548A I2C multiplexer).
 pub struct Hub<I2C> {

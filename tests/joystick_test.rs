@@ -25,9 +25,9 @@ fn test_joystick_update_and_read() {
     // Update and check new state
     assert!(joystick.update().unwrap());
 
-    // 255 -> 127 (Max positive)
-    // 0 -> -128 (Max negative)
-    assert_eq!(joystick.x(), 127);
+    // 255 -> -127 (Max negative under aligned sign scheme)
+    // 0 -> -128 (Max negative due to signed 8-bit overflow of 128)
+    assert_eq!(joystick.x(), -127);
     assert_eq!(joystick.y(), -128);
     assert!(joystick.button_pressed());
 
@@ -42,7 +42,7 @@ fn test_joystick_deadzone() {
         // 1. new()
         I2cTransaction::read(addr, vec![0x58, 128, 128, 0]),
         // 2. update() - slightly off center (135), within default deadzone (10)
-        // 135 - 128 = 7. Deadzone is 10. Should report 0.
+        // 128 - 135 = -7. Deadzone is 10. Should report 0.
         I2cTransaction::read(addr, vec![0x58, 135, 120, 0]),
     ];
 
@@ -52,7 +52,7 @@ fn test_joystick_deadzone() {
     joystick.update().unwrap();
 
     assert_eq!(joystick.x(), 0); // Should be 0 due to deadzone
-    assert_eq!(joystick.y(), 0); // -8 is also within deadzone 10
+    assert_eq!(joystick.y(), 0); // 8 is also within deadzone 10
 
     joystick.release().done();
 }
@@ -64,7 +64,7 @@ fn test_joystick_joint_deadzone() {
     let expectations = [
         // 1. new()
         I2cTransaction::read(addr, vec![0x58, 128, 128, 0]),
-        // 2. update() - X is within deadzone (135 -> +7), but Y is outside (160 -> +32)
+        // 2. update() - X is within deadzone (135 -> -7), but Y is outside (160 -> -32)
         // Since Y is outside, NEITHER should be snapped!
         I2cTransaction::read(addr, vec![0x58, 135, 160, 0]),
     ];
@@ -74,8 +74,8 @@ fn test_joystick_joint_deadzone() {
 
     joystick.update().unwrap();
 
-    assert_eq!(joystick.x(), 7); // Should NOT be snapped to 0
-    assert_eq!(joystick.y(), 32);
+    assert_eq!(joystick.x(), -7); // Should NOT be snapped to 0
+    assert_eq!(joystick.y(), -32);
 
     joystick.release().done();
 }

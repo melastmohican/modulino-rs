@@ -112,8 +112,8 @@ where
             raw_y = 128;
         }
 
-        self.x = ((raw_x as i16) - 128) as i8;
-        self.y = ((raw_y as i16) - 128) as i8;
+        self.x = (128 - (raw_x as i16)) as i8;
+        self.y = (128 - (raw_y as i16)) as i8;
         self.button_pressed = buf[3] != 0;
 
         Ok(self.x != previous_x || self.y != previous_y || self.button_pressed != previous_button)

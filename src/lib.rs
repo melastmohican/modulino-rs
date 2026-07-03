@@ -59,6 +59,7 @@ mod knob;
 mod latch_relay;
 mod led_matrix;
 mod light;
+mod motors;
 mod movement;
 mod opto_relay;
 mod pixels;
@@ -78,6 +79,7 @@ pub use knob::Knob;
 pub use latch_relay::LatchRelay;
 pub use led_matrix::{DisplayMode, LedMatrix};
 pub use light::{Gain, Light, LightMeasurement, MeasurementRate, Resolution};
+pub use motors::{DecayMode, Motors};
 pub use movement::{Movement, MovementValues};
 pub use opto_relay::OptoRelay;
 pub use pixels::Pixels;
@@ -131,6 +133,12 @@ pub mod addresses {
 
     /// Default address for Modulino LED Matrix
     pub const LED_MATRIX: u8 = 0x39;
+
+    /// Default address for Modulino Hub (0x70)
+    pub const HUB: u8 = 0x70;
+
+    /// Default address for Modulino Motors (0x48 >> 1 = 0x24)
+    pub const MOTORS: u8 = 0x24;
 }
 
 /// Pinstrap address map for device type detection.
@@ -161,4 +169,7 @@ pub mod pinstrap {
 
     /// Pinstrap address for Vibro
     pub const VIBRO: u8 = 0x70;
+
+    /// Pinstrap address for Motors
+    pub const MOTORS: u8 = 0x48;
 }
